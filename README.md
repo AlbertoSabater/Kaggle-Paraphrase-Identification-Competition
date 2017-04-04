@@ -1,4 +1,3 @@
 # Kaggle-Paraphrase-Identification-Competition
 
-## Quora Question Pairs
-## Can you identify question pairs that have the same intent?
+## Quora Question Pairs\nCan you identify question pairs that have the same intent?
