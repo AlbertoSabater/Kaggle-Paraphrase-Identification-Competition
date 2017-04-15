@@ -7,6 +7,7 @@ from nltk.stem import SnowballStemmer
 import dask.dataframe as dd
 import dask
 from sklearn import preprocessing
+import collections
 
 import sys
 
@@ -14,6 +15,7 @@ import sys
 
 np.random.seed(1337)  # for reproducibility
 stop = stopwords.words('english')
+dask.set_options(get=dask.multiprocessing.get)
 
 
 # Remove quotes on the left and right side
@@ -124,6 +126,29 @@ def removeNullWordList(qw):
     return qw[qw.question.apply(lambda x: len(x)) != 0]
 
 
+def removeUniqueWords(qw, maxRepetition):
+    aux = np.concatenate(np.array(qw.question))
+    counter = collections.Counter(aux)
+    print(counter.most_common(3))
+
+    unique_words = []
+    for key, value in counter.iteritems():
+        if value <= maxRepetition:
+            #print key, "-", value
+            unique_words += [key]
+    unique_words = list(set(unique_words))
+    
+    print "Unique words calculated. Tamano", len(unique_words)
+    
+    qwdd = dd.from_pandas(qw, npartitions=16)
+    print "dd creado"
+    aux = qwdd.question.apply(lambda x: [item for item in x if item not in unique_words], meta=('x', list)).compute()
+    qw.question = aux
+    
+    return qw
+
+
+
 # Transform array of words to array of indexes
 def wordsToIndexes(qw):
     words = getWords(qw.question)
@@ -148,14 +173,58 @@ def indexesToOneHot(qwi, l_words):
     limit = float(len(fm.index))
     current = float(1)
     for index, row in qwi.iterrows():
-        if current % 25000 == 0:
+        if current % 5000 == 0:
             showProgress(current, limit)
-            
+        
+#        i = np.zeros(l_words)
+#        i[row.question] = 1
+#        fm.loc[[index]] = i
+        
         for ind in row.question:
             fm.loc[[index], [ind]] = 1
         current += 1
 
     return fm
+
+
+#def addToFm(row, fm):
+#    for ind in row.question:
+#        print ind, " - "
+#        r = fm.loc[1]
+##        print r
+#        fm.loc[1] = dd.from_pandas(r)
+#        fm.loc[[row.index], [ind]] = 1
+        
+        
+        
+        
+        
+#        
+#def addToFm2(row, l_words, fm):
+#    print "========================="
+#    if type(row[1]) != str:
+#        print type(row), row[0], type(row[1]), row[1]
+#        i = np.zeros(l_words)
+#        i[row[1]] = 1
+#        print i, sum(i)
+#        fm.loc[row[0]] = i
+#    print "_________________________"
+#            
+## Transform array of indexes to one hot
+#def indexesToOneHotDist(qwi, l_words):
+#    qwi_dd = dd.from_pandas(qwi_aux, npartitions=7)
+#    
+#    fm = pd.DataFrame(0, index=qwi_aux.index, columns=np.arange(l_words))
+#
+##    qwi_dd.apply(lambda x: x[1], axis = 1).compute()
+#    qwi_dd.apply(lambda x: addToFm2(x, l_words, fm), axis = 1).compute()
+#
+#    return fm
+
+
+
+
+
 
 
 def showProgress(current, limit):
