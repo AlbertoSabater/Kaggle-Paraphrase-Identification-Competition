@@ -11,6 +11,8 @@ import collections
 
 import sys
 
+import math
+from collections import Counter
 
 
 np.random.seed(1337)  # for reproducibility
@@ -97,7 +99,14 @@ def cleanMoreStopWords(text):
     return text
 
 
-def removeStopWords(questions):    
+def removeStopWordsDist(questions):   
+    aux = questions.apply(lambda x: str(x).decode('utf-8'))
+    aux = dd.from_pandas(aux, npartitions=16)
+    return aux.apply(lambda x: ' '.join(filter(lambda y: y.lower() not in stop,  x.split())).encode('utf-8')).compute()
+
+
+
+def removeStopWords(questions):   
     questions = questions.apply(lambda x: cleanMoreStopWords(x))
     questions = questions.apply(lambda x: x.split())
     questions = questions.apply(lambda x: [item for item in x if item not in stop])
@@ -187,42 +196,92 @@ def indexesToOneHot(qwi, l_words):
     return fm
 
 
-#def addToFm(row, fm):
-#    for ind in row.question:
-#        print ind, " - "
-#        r = fm.loc[1]
-##        print r
-#        fm.loc[1] = dd.from_pandas(r)
-#        fm.loc[[row.index], [ind]] = 1
-        
-        
-        
-        
-        
-#        
-#def addToFm2(row, l_words, fm):
-#    print "========================="
-#    if type(row[1]) != str:
-#        print type(row), row[0], type(row[1]), row[1]
-#        i = np.zeros(l_words)
-#        i[row[1]] = 1
-#        print i, sum(i)
-#        fm.loc[row[0]] = i
-#    print "_________________________"
-#            
-## Transform array of indexes to one hot
-#def indexesToOneHotDist(qwi, l_words):
-#    qwi_dd = dd.from_pandas(qwi_aux, npartitions=7)
+def trainTfIdf():
+    return
+
+
+
+
+
+
+
+
+
+# Distances: http://web.archive.org/web/20081224234350/http://www.dcs.shef.ac.uk/~sam/stringmetrics.html
+def getTextFeaturesPairwiseDistributed(q1, q2):
+    #from sklearn.metrics import jaccard_similarity_score
+    import Levenshtein
+    
+    ddq = pd.concat([q1,q2], axis=1)
+    ddq.question1 = ddq.question1.apply(lambda x: str(x).decode('utf-8'))
+    ddq.question2 = ddq.question2.apply(lambda x: str(x).decode('utf-8'))
+
+    textFeatures = pd.DataFrame(columns =  ['cos_sim', 'lev_dist', 'jaro', 'jaro_winkler', 'ratio'])
+
+    aux = dd.from_pandas(ddq, npartitions=16)
+    
+    textFeatures.cos_sim = aux.apply(lambda x: cosine_similarity(text_to_vector(x.question1), text_to_vector(x.question2)), axis=1, meta=('x', list)).compute()
+    textFeatures.lev_dist = aux.apply(lambda x: Levenshtein.distance(x.question1, x.question2), axis=1, meta=('x', list))
+    textFeatures.jaro = aux.apply(lambda x: Levenshtein.jaro(x.question1, x.question2), axis=1, meta=('x', list))
+    textFeatures.jaro_winkler = aux.apply(lambda x: Levenshtein.jaro_winkler(x.question1, x.question2), axis=1, meta=('x', list))
+    textFeatures.ratio = aux.apply(lambda x: Levenshtein.ratio(x.question1, x.question2), axis=1, meta=('x', list))
+      
+    return textFeatures
+
+
+## Distances: http://web.archive.org/web/20081224234350/http://www.dcs.shef.ac.uk/~sam/stringmetrics.html
+#def getTextFeaturesPairwise(q1, q2, index):
+#    #from sklearn.metrics import jaccard_similarity_score
+#    import Levenshtein
 #    
-#    fm = pd.DataFrame(0, index=qwi_aux.index, columns=np.arange(l_words))
-#
-##    qwi_dd.apply(lambda x: x[1], axis = 1).compute()
-#    qwi_dd.apply(lambda x: addToFm2(x, l_words, fm), axis = 1).compute()
-#
-#    return fm
+#    print len(q1), len(q2), len(index)
+#    
+#    textFeatures = pd.DataFrame(columns=['cos_sim', 'lev_dist', 'jaro', 'jaro_winkler', 'ratio'])
+#    
+#    limit = float(len(index))
+#    current = float(1)
+#        
+#    for s1, s2, i in zip(q1,q2,index):
+#        
+#        if current % 10000 == 0:
+#            showProgress(current, limit)
+#        
+##        print "\n\n", s1, s2, "\n"
+#        #jaccard = jaccard_similarity_score(row.question1.split(), row.question2.split(), normalize=True)
+#        cos_sim = cosine_similarity(text_to_vector(s1), text_to_vector(s2))
+#        
+#        dist = Levenshtein.distance(s1, s2)
+#        jaro = Levenshtein.jaro(s1, s2)
+#        jaro_winkler = Levenshtein.jaro_winkler(s1, s2)
+#        ratio = Levenshtein.ratio(s1, s2)
+#        
+##        print [cos_sim, dist, jaro, jaro_winkler, ratio], s1.index, s2.index
+#        textFeatures[i] = [cos_sim, dist, jaro, jaro_winkler, ratio]
+# 
+#        current += 1
+#      
+#    return textFeatures
 
 
+#https://gist.github.com/ahmetalsan/06596e3f2ea3182e185a
+def cosine_similarity(vec1, vec2):
+    intersection = set(vec1.keys()) & set(vec2.keys())
+    numerator = sum([vec1[x] * vec2[x] for x in intersection])
 
+    sum1 = sum([vec1[x]**2 for x in vec1.keys()])
+    sum2 = sum([vec2[x]**2 for x in vec2.keys()])
+    denominator = math.sqrt(sum1) * math.sqrt(sum2)
+
+    if not denominator:
+        return 0.0
+    else:
+        return float(numerator) / denominator
+
+def text_to_vector(text):
+    word = re.compile(r'\w+')
+    words = word.findall(text)
+    return Counter(words)
+ 
 
 
 
