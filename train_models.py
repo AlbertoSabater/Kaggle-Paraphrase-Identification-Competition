@@ -1,4 +1,5 @@
 from keras.callbacks import EarlyStopping, ModelCheckpoint
+from keras.optimizers import RMSprop
 
 import numpy as np
 import pandas as pd
@@ -11,7 +12,7 @@ np.random.seed(1337)  # for reproducibility
 
 
 MAX_SEQUENCE_LENGTH = 30
-earlyStopping = EarlyStopping(monitor='val_loss', min_delta=0.00001, verbose=1, mode='min', patience=3)
+earlyStopping = EarlyStopping(monitor='val_loss', min_delta=0.00001, verbose=1, mode='min', patience=2)
 
 
 ###########################################################
@@ -31,87 +32,21 @@ train_1 = train_1[rand]
 train_2 = train_2[rand]
 labels = labels[rand]
 
+textDistances = labels[rand]
+textDistances_noStopWords = labels[rand]
+
 train_1_noStopWords = train_1[rand]
 train_2_noStopWords = train_2[rand]
 
 ###########################################################
 
-
+'''
 EMBEDDING_LEN  = 300
 
-'''
-saving_file, model = models.model_v0_textDists(textDistances.shape[1], MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp=[512,512], 
-                                         word_index=tokenizer.word_index, embeddings_file=4)
-               
-model.compile(loss='binary_crossentropy', optimizer='adam')
-print "--", saving_file, "--"
-
-checkpoint = ModelCheckpoint("Models/" + saving_file, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-
-callbacks_list = [earlyStopping]
-
-time1 = time.time()
-hist = model.fit([train_1, train_2, np.array(textDistances)], labels, epochs=200, batch_size=512, shuffle=True, validation_split=0.3, callbacks=callbacks_list)
-print "Model trained", ((time.time()-time1)/60)
-  
-
-###########################################################
-             
-saving_file, model = models.model_v0_textDists(textDistances.shape[1], MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp=[512,512], 
-                                         word_index=tokenizer.word_index, embeddings_file=4)
-model.compile(loss='binary_crossentropy', optimizer='adam')
-print "--", saving_file, "--"
-
-checkpoint = ModelCheckpoint("Models/" + saving_file, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-
-callbacks_list = [earlyStopping]
-
-time1 = time.time()
-hist = model.fit([train_1, train_2, np.array(textDistances)], labels, epochs=200, batch_size=512, shuffle=True, validation_split=0.2, callbacks=callbacks_list)
-print "Model trained", ((time.time()-time1)/60)
-
-
-###########################################################
-
-saving_file, model = models.model_v0_textDists(textDistances.shape[1], MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp=[512,512], 
-                                         word_index=tokenizer.word_index, embeddings_file=4)
-               
-model.compile(loss='binary_crossentropy', optimizer='adam')
-print "--", saving_file, "--"
-
-checkpoint = ModelCheckpoint("Models/" + saving_file, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-
-callbacks_list = [earlyStopping]
-
-time1 = time.time()
-hist = model.fit([train_1, train_2, np.array(textDistances)], labels, epochs=200, batch_size=512, shuffle=True, validation_split=0.1, callbacks=callbacks_list)
-print "Model trained", ((time.time()-time1)/60)
-
-
-###########################################################
-###########################################################
-
-
-
-saving_file, model = models.model_v0_textDists(textDistances_noStopWords.shape[1], MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp=[512,512], 
-                                         word_index=tokenizer.word_index, embeddings_file=4)
-               
-model.compile(loss='binary_crossentropy', optimizer='adam')
-print "--", saving_file, "--"
-
-checkpoint = ModelCheckpoint("Models/" + saving_file, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-
-callbacks_list = [earlyStopping]
-
-time1 = time.time()
-hist = model.fit([train_1, train_2, np.array(textDistances_noStopWords)], labels, epochs=200, batch_size=512, shuffle=True, validation_split=0.2, callbacks=callbacks_list)
-print "Model trained", ((time.time()-time1)/60)
-
-###########################################################
 
 features = np.array(pd.concat([textDistances,textDistances_noStopWords], axis=1))
 
-saving_file, model = models.model_v0_textDists(features.shape[1], MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp=[512,512], 
+saving_file, model = models.model_v0_textDists(features.shape[1], MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp=[512,512,128], 
                                          word_index=tokenizer.word_index, embeddings_file=4)
                
 model.compile(loss='binary_crossentropy', optimizer='adam')
@@ -119,43 +54,42 @@ print "--", saving_file, "--"
 
 checkpoint = ModelCheckpoint("Models/" + saving_file, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 
-callbacks_list = [earlyStopping]
+callbacks_list = [earlyStopping, checkpoint]
 
 time1 = time.time()
 hist = model.fit([train_1, train_2, features], labels, epochs=200, batch_size=512, shuffle=True, validation_split=0.2, callbacks=callbacks_list)
 print "Model trained", ((time.time()-time1)/60)
 
+features_test = np.array(pd.concat([textDistances_test,textDistances_test_noStopWords], axis=1))
+predictTest(saving_file, [test_1, test_2, features_test])
+'''
 
-###########################################################
 
 features = np.array(pd.concat([textDistances,textDistances_noStopWords], axis=1))
 
-saving_file, model = models.model_v0_textDists(features.shape[1], MAX_SEQUENCE_LENGTH, nb_words_noStopWords, EMBEDDING_LEN, num_lstm_lp=[512,512], 
-                                         word_index=tokenizer_noStopWords.word_index, embeddings_file=4)
+saving_file, model = models.model_v1_textDists(features.shape[1], MAX_SEQUENCE_LENGTH, nb_words, num_lstm_lp=[512,512,128], 
+                                         word_index=tokenizer.word_index)
                
-model.compile(loss='binary_crossentropy', optimizer='adam')
+model.compile(loss='binary_crossentropy', optimizer=RMSprop(lr=0.0001))
 print "--", saving_file, "--"
 
 checkpoint = ModelCheckpoint("Models/" + saving_file, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 
-callbacks_list = [earlyStopping]
+callbacks_list = [earlyStopping, checkpoint]
 
 time1 = time.time()
-hist = model.fit([train_1_noStopWords, train_2_noStopWords, features], labels, epochs=200, batch_size=512, shuffle=True, validation_split=0.2, callbacks=callbacks_list)
+hist = model.fit([train_1, train_2, train_1_noStopWords, train_2_noStopWords, features], labels, epochs=200, batch_size=512, shuffle=True, validation_split=0.2, callbacks=callbacks_list)
 print "Model trained", ((time.time()-time1)/60)
 
-'''
+features_test = np.array(pd.concat([textDistances_test,textDistances_test_noStopWords], axis=1))
+predictTest(saving_file, [test_1, test_2, test_1_noStopWords, test_2_noStopWords, features_test])
 
 
 
 
 
 
-
-
-
-
-def predictTest(save_file):
+def predictTest(save_file, data):
     files = os.listdir('Models')
     default_splited = saving_file.split('*')
     
@@ -181,7 +115,7 @@ def predictTest(save_file):
     print "\nPredicting test values..."
     time1 = time.time()
     
-    preds = model.predict([test_1, test_2])
+    preds = model.predict(data)
     preds = np.round(preds).astype(int)
     
     submission = pd.DataFrame({'test_id': np.arange(len(preds)), 'is_duplicate': preds.ravel()})
