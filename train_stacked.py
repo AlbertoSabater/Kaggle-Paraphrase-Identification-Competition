@@ -1,5 +1,5 @@
 from keras.callbacks import EarlyStopping, ModelCheckpoint
-from keras.optimizers import RMSprop
+from keras.optimizers import RMSprop, Adam
 
 import numpy as np
 import pandas as pd
@@ -7,6 +7,7 @@ import time
 import models
 import pickle
 import os
+import datetime
 
 np.random.seed(1337)  # for reproducibility
 
@@ -36,14 +37,14 @@ train_1_mod = train_1[rand]
 train_2_mod = train_2[rand]
 labels_mod = labels[rand]
 
-textDistances_mod = textDistances.loc[rand]
-textDistances_noStopWords_mod = textDistances_noStopWords.loc[rand]
+textDistances_mod = textDistances.iloc[rand]
+textDistances_noStopWords_mod = textDistances_noStopWords.iloc[rand]
 
-train_1_noStopWords_mod = train_1[rand]
-train_2_noStopWords_mod = train_2[rand]
+train_1_noStopWords_mod = train_1_noStopWords[rand]
+train_2_noStopWords_mod = train_2_noStopWords[rand]
 
-features_mod = np.array(pd.concat([textDistances,textDistances_noStopWords], axis=1))   # Use in training
-features_train = np.array(pd.concat([textDistances_mod,textDistances_noStopWords_mod], axis=1)) # Use in predict
+features_mod = np.array(pd.concat([textDistances_mod,textDistances_noStopWords_mod], axis=1))   # Use in training
+features_train = np.array(pd.concat([textDistances,textDistances_noStopWords], axis=1)) # Use in predict
 features_test = np.array(pd.concat([textDistances_test,textDistances_test_noStopWords], axis=1))    # Use in predict
 
 
@@ -55,12 +56,12 @@ def createModelDir():
     dir_name = BASE_DIR + 'model_' + str(len(files)) + '/'
     os.makedirs(dir_name)
     print '\n\n\n#########################################################################'
-    print '###############################  MODEL', len(files), ' # ##############################'
+    print '###############################  MODEL', len(files), ' ###############################'
     print '#########################################################################'
     return dir_name
 
 
-def storePreds(model_dir, model, data_train, data_test):
+def storePreds(model_dir, model, data_train, data_test, version="_1"):
     files = os.listdir(model_dir)
 
     best_loss = 99999
@@ -83,7 +84,7 @@ def storePreds(model_dir, model, data_train, data_test):
     # Load best model
     model.load_weights(model_dir + best_name)
     
-    print "Predicting values..."
+    print "Predicting values...", datetime.datetime.now().time().strftime("%H:%M:%S")
     time1 = time.time()
  
     filename, file_extension = os.path.splitext(best_name)
@@ -91,19 +92,23 @@ def storePreds(model_dir, model, data_train, data_test):
     preds = model.predict(data_train)
     preds_round = np.round(preds).astype(int)
     results_train = pd.DataFrame({'preds': preds.ravel(), 'preds_round': preds_round.ravel()})
-    results_train.to_csv(model_dir + filename + '_results_train.csv', columns=['preds', 'preds_round'], index=False)
+    results_train.to_csv(model_dir + filename + '_results_train' + version + '.csv', columns=['preds', 'preds_round'], index=False)
     
-    print "Train data predicted and stored"
+    print "Train data predicted and stored", datetime.datetime.now().time().strftime("%H:%M:%S")
  
     preds_test = model.predict(data_test)
     preds_round_test = np.round(preds_test).astype(int)
     results_test = pd.DataFrame({'preds_test': preds_test.ravel(), 'preds_round_test': preds_round_test.ravel()})    
-    results_test.to_csv(model_dir + filename + '_results_test.csv', columns=['preds_test', 'preds_round_test'], index=False)
+    results_test.to_csv(model_dir + filename + '_results_test' + version + '.csv', columns=['preds_test', 'preds_round_test'], index=False)
 
     submission = pd.DataFrame({'test_id': np.arange(len(preds_test)), 'is_duplicate': preds_round_test.ravel()})
-    submission.to_csv(model_dir + filename + '_submission.csv', columns=['test_id', 'is_duplicate'], index=False)
+    submission.to_csv(model_dir + filename + '_submission' + version + '.csv', columns=['test_id', 'is_duplicate'], index=False)
     
-    print "Predictions obtained, processed and saved", ((time.time()-time1)/60)
+    print "Predictions obtained, processed and saved", ((time.time()-time1)/60), datetime.datetime.now().time().strftime("%H:%M:%S")
+    
+    print "-- Taking a siesta"
+    time.sleep(60*3)    # 5 mins
+    print "-- Wake up!"
     
     
     
@@ -125,7 +130,7 @@ checkpoint = ModelCheckpoint(model_dir + saving_file, monitor='val_loss', verbos
 callbacks_list = [earlyStopping, checkpoint]
 
 time1 = time.time()
-hist = model.fit([train_1_mod, train_2_mod], labels, epochs=200, batch_size=512, shuffle=True, 
+hist = model.fit([train_1_mod, train_2_mod], labels_mod, epochs=200, batch_size=512, shuffle=True, 
                  validation_split=0.2, callbacks=callbacks_list, verbose=2)
 
 print "Model trained", ((time.time()-time1)/60)
@@ -138,7 +143,7 @@ storePreds(model_dir, model, [train_1, train_2], [test_1, test_2])
 model_dir = createModelDir()
 
 saving_file, model = models.model_v0(MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp=[512,512], 
-                                         word_index=tokenizer.word_index, embeddings_file=4)
+                                         word_index=tokenizer_noStopWords.word_index, embeddings_file=4)
                
 model.compile(loss='binary_crossentropy', optimizer='adam')
 
@@ -146,7 +151,7 @@ checkpoint = ModelCheckpoint(model_dir + saving_file, monitor='val_loss', verbos
 callbacks_list = [earlyStopping, checkpoint]
 
 time1 = time.time()
-hist = model.fit([train_1_noStopWords_mod, train_2_noStopWords_mod], labels, epochs=200, batch_size=512, shuffle=True, 
+hist = model.fit([train_1_noStopWords_mod, train_2_noStopWords_mod], labels_mod, epochs=200, batch_size=512, shuffle=True, 
                  validation_split=0.2, callbacks=callbacks_list, verbose=2)
 
 print "Model trained", ((time.time()-time1)/60)
@@ -154,6 +159,8 @@ print "Model trained", ((time.time()-time1)/60)
 storePreds(model_dir, model, [train_1_noStopWords, train_2_noStopWords], [test_1_noStopWords, test_2_noStopWords])
 ###############################################################################
 ###############################################################################
+
+
 
 
 
@@ -169,12 +176,13 @@ checkpoint = ModelCheckpoint(model_dir + saving_file, monitor='val_loss', verbos
 callbacks_list = [earlyStopping, checkpoint]
 
 time1 = time.time()
-hist = model.fit([train_1_mod, train_2_mod, features_mod], labels, epochs=200, batch_size=512, shuffle=True, 
+hist = model.fit([train_1_mod, train_2_mod, features_mod], labels_mod, epochs=200, batch_size=512, shuffle=True, 
                  validation_split=0.2, callbacks=callbacks_list, verbose=2)
 
 print "Model trained", ((time.time()-time1)/60)
 
 storePreds(model_dir, model, [train_1, train_2, features_train], [test_1, test_2, features_test])
+storePreds(model_dir, model, [train_2, train_1, features_train], [test_2, test_1, features_test], version="_2")
 ###############################################################################
 
 
@@ -182,7 +190,7 @@ storePreds(model_dir, model, [train_1, train_2, features_train], [test_1, test_2
 model_dir = createModelDir()
 
 saving_file, model = models.model_v0_textDists(features_mod.shape[1], MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, 
-                                               num_lstm_lp=[512,512], word_index=tokenizer.word_index)
+                                               num_lstm_lp=[512,512], word_index=tokenizer_noStopWords.word_index)
                
 model.compile(loss='binary_crossentropy', optimizer='adam')
 
@@ -190,12 +198,13 @@ checkpoint = ModelCheckpoint(model_dir + saving_file, monitor='val_loss', verbos
 callbacks_list = [earlyStopping, checkpoint]
 
 time1 = time.time()
-hist = model.fit([train_1_noStopWords_mod, train_2_noStopWords_mod, features_mod], labels, epochs=200, batch_size=512, shuffle=True, 
+hist = model.fit([train_1_noStopWords_mod, train_2_noStopWords_mod, features_mod], labels_mod, epochs=200, batch_size=512, shuffle=True, 
                  validation_split=0.2, callbacks=callbacks_list, verbose=2)
 
 print "Model trained", ((time.time()-time1)/60)
 
 storePreds(model_dir, model, [train_1_noStopWords, train_2_noStopWords, features_train], [test_1_noStopWords, test_2_noStopWords, features_test])
+storePreds(model_dir, model, [train_2_noStopWords, train_1_noStopWords, features_train], [test_2_noStopWords, test_1_noStopWords, features_test], version="_2")
 ###############################################################################
 ###############################################################################
 ###############################################################################
@@ -206,20 +215,23 @@ storePreds(model_dir, model, [train_1_noStopWords, train_2_noStopWords, features
 model_dir = createModelDir()
 
 saving_file, model = models.model_v1_textDists(features_mod.shape[1], MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, 
-                                               num_lstm_lp=[512,512], word_index=tokenizer.word_index)
+                                               num_lstm_lp=[512,512,128], word_index=tokenizer.word_index)
                
+#model.compile(loss='binary_crossentropy', optimizer=RMSprop(lr=0.0001))
+#model.compile(loss='binary_crossentropy', optimizer=Adam(lr=0.0001))
 model.compile(loss='binary_crossentropy', optimizer='adam')
 
 checkpoint = ModelCheckpoint(model_dir + saving_file, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 callbacks_list = [earlyStopping, checkpoint]
 
 time1 = time.time()
-hist = model.fit([train_1_mod, train_2_mod, features_mod], labels, epochs=200, batch_size=512, shuffle=True, 
+hist = model.fit([train_1_mod, train_2_mod, features_mod], labels_mod, epochs=200, batch_size=512, shuffle=True, 
                  validation_split=0.2, callbacks=callbacks_list, verbose=2)
 
 print "Model trained", ((time.time()-time1)/60)
 
 storePreds(model_dir, model, [train_1, train_2, features_train], [test_1, test_2, features_test])
+#storePreds(model_dir, model, [train_2, train_1, features_train], [test_2, test_1, features_test], version="_2")
 ###############################################################################
 
 
@@ -227,7 +239,7 @@ storePreds(model_dir, model, [train_1, train_2, features_train], [test_1, test_2
 model_dir = createModelDir()
 
 saving_file, model = models.model_v1_textDists(features_mod.shape[1], MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, 
-                                               num_lstm_lp=[512,512], word_index=tokenizer.word_index)
+                                               num_lstm_lp=[512,512], word_index=tokenizer_noStopWords.word_index)
                
 model.compile(loss='binary_crossentropy', optimizer='adam')
 
@@ -235,15 +247,17 @@ checkpoint = ModelCheckpoint(model_dir + saving_file, monitor='val_loss', verbos
 callbacks_list = [earlyStopping, checkpoint]
 
 time1 = time.time()
-hist = model.fit([train_1_noStopWords_mod, train_2_noStopWords_mod, features_mod], labels, epochs=200, batch_size=512, shuffle=True, 
+hist = model.fit([train_1_noStopWords_mod, train_2_noStopWords_mod, features_mod], labels_mod, epochs=200, batch_size=512, shuffle=True, 
                  validation_split=0.2, callbacks=callbacks_list, verbose=2)
 
 print "Model trained", ((time.time()-time1)/60)
 
 storePreds(model_dir, model, [train_1_noStopWords, train_2_noStopWords, features_train], [test_1_noStopWords, test_2_noStopWords, features_test])
+storePreds(model_dir, model, [train_2_noStopWords, train_1_noStopWords, features_train], [test_2_noStopWords, test_1_noStopWords, features_test], version="_2")
 ###############################################################################
 ###############################################################################
 ###############################################################################
+
 
 
 
@@ -259,23 +273,49 @@ checkpoint = ModelCheckpoint(model_dir + saving_file, monitor='val_loss', verbos
 callbacks_list = [earlyStopping, checkpoint]
 
 time1 = time.time()
-hist = model.fit([train_1_mod, train_2_mod, train_1_noStopWords_mod, train_2_noStopWords_mod, features_mod], labels, epochs=200, batch_size=512, shuffle=True, 
+hist = model.fit([train_1_mod, train_2_mod, train_1_noStopWords_mod, train_2_noStopWords_mod, features_mod], labels_mod, epochs=200, batch_size=512, shuffle=True, 
                  validation_split=0.2, callbacks=callbacks_list, verbose=2)
 
 print "Model trained", ((time.time()-time1)/60)
 
 storePreds(model_dir, model, [train_1, train_2, train_1_noStopWords, train_2_noStopWords, features_train], [test_1, test_2, test_1_noStopWords, test_2_noStopWords, features_test])
+storePreds(model_dir, model, [train_2, train_1, train_2_noStopWords, train_1_noStopWords, features_train], [test_2, test_1, test_2_noStopWords, test_1_noStopWords, features_test], version="_2")
 ###############################################################################
 ###############################################################################
 ###############################################################################
+
 
 
 
 ############################### MODEL 7 #######################################
 model_dir = createModelDir()
 
-saving_file, model = models.model_v0(MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp=[512,512], 
-                                         word_index=tokenizer.word_index, embeddings_file=0)
+saving_file, model = models.model_v1_1_textDists(features_mod.shape[1], MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, 
+                                               num_lstm_lp=[512,512,128], word_index=tokenizer.word_index)
+               
+#model.compile(loss='binary_crossentropy', optimizer=RMSprop(lr=0.0001))
+#model.compile(loss='binary_crossentropy', optimizer=Adam(lr=0.0001))
+model.compile(loss='binary_crossentropy', optimizer='adam')
+
+checkpoint = ModelCheckpoint(model_dir + saving_file, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+callbacks_list = [earlyStopping, checkpoint]
+
+time1 = time.time()
+hist = model.fit([train_1_mod, train_2_mod, features_mod], labels_mod, epochs=200, batch_size=512, shuffle=True, 
+                 validation_split=0.2, callbacks=callbacks_list, verbose=2)
+
+print "Model trained", ((time.time()-time1)/60)
+
+storePreds(model_dir, model, [train_1, train_2, features_train], [test_1, test_2, features_test])
+#storePreds(model_dir, model, [train_2, train_1, features_train], [test_2, test_1, features_test], version="_2")
+###############################################################################
+
+
+############################### MODEL 8 #######################################
+model_dir = createModelDir()
+
+saving_file, model = models.model_v1_1_textDists(features_mod.shape[1], MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, 
+                                               num_lstm_lp=[512,512], word_index=tokenizer_noStopWords.word_index)
                
 model.compile(loss='binary_crossentropy', optimizer='adam')
 
@@ -283,16 +323,22 @@ checkpoint = ModelCheckpoint(model_dir + saving_file, monitor='val_loss', verbos
 callbacks_list = [earlyStopping, checkpoint]
 
 time1 = time.time()
-hist = model.fit([train_1_mod, train_2_mod], labels, epochs=200, batch_size=512, shuffle=True, 
+hist = model.fit([train_1_noStopWords_mod, train_2_noStopWords_mod, features_mod], labels_mod, epochs=200, batch_size=512, shuffle=True, 
                  validation_split=0.2, callbacks=callbacks_list, verbose=2)
 
 print "Model trained", ((time.time()-time1)/60)
 
-storePreds(model_dir, model, [train_1, train_2], [test_1, test_2])
+storePreds(model_dir, model, [train_1_noStopWords, train_2_noStopWords, features_train], [test_1_noStopWords, test_2_noStopWords, features_test])
+storePreds(model_dir, model, [train_2_noStopWords, train_1_noStopWords, features_train], [test_2_noStopWords, test_1_noStopWords, features_test], version="_2")
+###############################################################################
+###############################################################################
 ###############################################################################
 
 
-############################### MODEL 8 #######################################
+
+
+
+############################### MODEL 9 #######################################
 model_dir = createModelDir()
 
 saving_file, model = models.model_v0(MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp=[512,512], 
@@ -304,12 +350,35 @@ checkpoint = ModelCheckpoint(model_dir + saving_file, monitor='val_loss', verbos
 callbacks_list = [earlyStopping, checkpoint]
 
 time1 = time.time()
-hist = model.fit([train_1_noStopWords_mod, train_2_noStopWords_mod], labels, epochs=200, batch_size=512, shuffle=True, 
+hist = model.fit([train_1_mod, train_2_mod], labels_mod, epochs=200, batch_size=512, shuffle=True, 
+                 validation_split=0.2, callbacks=callbacks_list, verbose=2)
+
+print "Model trained", ((time.time()-time1)/60)
+
+storePreds(model_dir, model, [train_1, train_2], [test_1, test_2])
+storePreds(model_dir, model, [train_2, train_1], [test_2, test_1], version="_2")
+###############################################################################
+
+
+############################### MODEL 10 #######################################
+model_dir = createModelDir()
+
+saving_file, model = models.model_v0(MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp=[512,512], 
+                                         word_index=tokenizer_noStopWords.word_index, embeddings_file=0)
+               
+model.compile(loss='binary_crossentropy', optimizer='adam')
+
+checkpoint = ModelCheckpoint(model_dir + saving_file, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+callbacks_list = [earlyStopping, checkpoint]
+
+time1 = time.time()
+hist = model.fit([train_1_noStopWords_mod, train_2_noStopWords_mod], labels_mod, epochs=200, batch_size=512, shuffle=True, 
                  validation_split=0.2, callbacks=callbacks_list, verbose=2)
 
 print "Model trained", ((time.time()-time1)/60)
 
 storePreds(model_dir, model, [train_1_noStopWords, train_2_noStopWords], [test_1_noStopWords, test_2_noStopWords])
+storePreds(model_dir, model, [train_2_noStopWords, train_1_noStopWords], [test_2_noStopWords, test_1_noStopWords], version="_2")
 ###############################################################################
 ###############################################################################
 

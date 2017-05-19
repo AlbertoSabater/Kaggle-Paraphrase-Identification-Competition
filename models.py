@@ -7,6 +7,7 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint
 import os
 import numpy as np
 import time
+import datetime
 
 
 
@@ -14,6 +15,7 @@ import time
 # Mejor resultado con num_lstm_lp [512,512] y subiendo se podria mejorar
 # fullText + [512, 512]                                             -> 
 # text_noStopWords + [512, 512]                                     -> 
+# 0.3529
 def model_v0(MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp, word_index=None, embeddings_file=4):
     
     saving_file = "model_v0_*{val_loss:.4f}*_" + str(MAX_SEQUENCE_LENGTH) + "_" + str(nb_words) + "_" + \
@@ -76,6 +78,7 @@ def model_v0(MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp, word_ind
 # fullText + [512, 512] + textDistances_noStopWords                                 -> 
 # fullText + [512, 512] + textDistances_noStopWords + textDistances                 -> 
 # text_noStopWords + [512, 512] + textDistances_noStopWords + textDistances         -> 
+# 0.3412
 def model_v0_textDists(dist_length, MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp, word_index=None, embeddings_file=4):
     
     saving_file = "model_v0_textDists*{val_loss:.4f}*_" + str(MAX_SEQUENCE_LENGTH) + "_" + str(dist_length) + "_" + str(nb_words) + "_" + \
@@ -140,9 +143,10 @@ def model_v0_textDists(dist_length, MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN
 # fullText + [512, 512] + textDistances_noStopWords                                 -> 0.3509
 # fullText + [512, 512] + textDistances_noStopWords + textDistances                 -> 0.3462
 # text_noStopWords + [512, 512] + textDistances_noStopWords + textDistances         -> 0.660
+# 0.3401
 def model_v1_textDists(dist_length, MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp, word_index=None, embeddings_file=4):
     
-    saving_file = "model_v0_textDists*{val_loss:.4f}*_" + str(MAX_SEQUENCE_LENGTH) + "_" + str(dist_length) + "_" + str(nb_words) + "_" + \
+    saving_file = "model_v1_textDists*{val_loss:.4f}*_" + str(MAX_SEQUENCE_LENGTH) + "_" + str(dist_length) + "_" + str(nb_words) + "_" + \
             str(EMBEDDING_LEN) + "_" + str(num_lstm_lp[0]) + "_" + str(num_lstm_lp[1])
     
     print saving_file
@@ -201,6 +205,81 @@ def model_v1_textDists(dist_length, MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN
     model = Model([imp1, imp2, imp3], model)
     
     return saving_file, model
+
+
+
+# 0.3375
+def model_v1_1_textDists(dist_length, MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp, word_index=None, embeddings_file=4):
+    
+    saving_file = "model_v1_1_textDists*{val_loss:.4f}*_" + str(MAX_SEQUENCE_LENGTH) + "_" + str(dist_length) + "_" + str(nb_words) + "_" + \
+            str(EMBEDDING_LEN) + "_" + str(num_lstm_lp[0]) + "_" + str(num_lstm_lp[1])
+    
+    print saving_file
+    
+    imp1 = Input(shape=(MAX_SEQUENCE_LENGTH,), dtype='int32')
+    imp2 = Input(shape=(MAX_SEQUENCE_LENGTH,), dtype='int32')
+    imp3 = Input(shape=(dist_length,))
+
+    if word_index!=None and embeddings_file!=None:
+        if embeddings_file == 0:
+            embedding_layer = Embedding(nb_words, EMBEDDING_LEN, input_length=MAX_SEQUENCE_LENGTH)
+        elif embeddings_file == 1:     # embedding_len: 50, 100, 200, 300
+            embedding_layer = prepareEmbeddingLayer('glove.6B.' + str(EMBEDDING_LEN) + 'd.txt', 
+                                                    word_index, EMBEDDING_LEN, MAX_SEQUENCE_LENGTH)
+            saving_file += "_le1"
+        elif embeddings_file == 2:   # embedding_len: 25, 50, 100, 200, 
+            embedding_layer = prepareEmbeddingLayer('glove.twitter.27B.' + str(EMBEDDING_LEN) + 'd.txt', 
+                                                    word_index, EMBEDDING_LEN, MAX_SEQUENCE_LENGTH)
+            saving_file += "_le2"
+        elif embeddings_file ==3:
+            embedding_layer = prepareEmbeddingLayer('glove.42B.300d.txt', word_index, 300, MAX_SEQUENCE_LENGTH)
+            saving_file += "_le3"
+        elif embeddings_file ==4:
+            embedding_layer = prepareEmbeddingLayer('glove.840B.300d.txt', word_index, 300, MAX_SEQUENCE_LENGTH)
+            saving_file += "_le4"
+        else:
+            raise ValueError('Fichero de embeddings no valido')
+    else:
+        embedding_layer = Embedding(nb_words, EMBEDDING_LEN, input_length=MAX_SEQUENCE_LENGTH)
+        
+    saving_file += ".hdf5"
+    
+    lstm_layer = LSTM(num_lstm_lp[0])
+    
+    model1 = embedding_layer(imp1)
+    model2 = embedding_layer(imp2)
+        
+    model1 = lstm_layer(model1)
+    model2 = lstm_layer(model2) 
+    
+    
+#    features = Dense(dist_length)(imp3)
+    
+    model = concatenate([model1, model2], axis=1)
+#    model = concatenate([model1, model2, imp3], axis=1)
+    model = BatchNormalization()(model)
+    
+    model = Dense(num_lstm_lp[1])(model)
+    model = BatchNormalization()(model)
+    model = Activation('relu')(model)
+    model = Dropout(0.2)(model)
+
+    model = concatenate([model, imp3], axis=1)
+    
+    model = Dense(num_lstm_lp[2])(model)
+    model = BatchNormalization()(model)
+    model = Activation('relu')(model)
+    model = Dropout(0.2)(model)
+    
+    model = Dense(1)(model)
+    model = BatchNormalization()(model)
+    model = Activation('sigmoid')(model)
+    
+    model = Model([imp1, imp2, imp3], model)
+    
+    return saving_file, model
+
+
 
 
 
@@ -292,7 +371,7 @@ def prepareEmbeddingLayer(embeddings_file, word_index, embedding_len, max_sequen
 
 # No dejar en blanco las palabras que estan fuera del corpus
 def prepareEmbeddingLayer_v2(embeddings_file, word_index, embedding_len, max_sequence_len):
-    print "Cargando embeddings:", embeddings_file
+    print "Cargando embeddings:", embeddings_file, datetime.datetime.now().time().strftime("%H:%M:%S")
     time1 = time.time()
    
     embeddings_index = {}
@@ -317,7 +396,7 @@ def prepareEmbeddingLayer_v2(embeddings_file, word_index, embedding_len, max_seq
                             input_length=max_sequence_len,
                             trainable=False)
     
-    print "Embeddings cargados", ((time.time()-time1)/60)
+    print "Embeddings cargados", ((time.time()-time1)/60), datetime.datetime.now().time().strftime("%H:%M:%S")
     
     return embedding_layer
 

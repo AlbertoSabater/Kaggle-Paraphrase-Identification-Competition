@@ -31,9 +31,7 @@ np.random.seed(1337)  # for reproducibility
 # TO-DO: define max words
 MAX_NB_WORDS = 600000           # 424706
 MAX_SEQUENCE_LENGTH = 30
-MAX_SEQUENCE_LENGTH_NOSTOPWORDS = 30
 
-NUM_LSTM = 128
 
 LOAD_ALL = False
 
@@ -50,8 +48,7 @@ if not LOAD_ALL:
     q1_test = data_test['question1']
     q2_test = data_test['question2']
     
-    
-    
+
     
     time1 = time.time()
     # Clean questions
@@ -65,6 +62,7 @@ if not LOAD_ALL:
     
     time1 = time.time()
     textDistances = cleaning_utils.getTextFeaturesPairwiseDistributed(q1,q2)
+    print textDistances
     textDistances_test = cleaning_utils.getTextFeaturesPairwiseDistributed(q1_test,q2_test)
     print "Distances calculated", ((time.time()-time1)/60)
     
@@ -143,11 +141,7 @@ else:
                      nb_words_noStopWords, tokenizer_noStopWords, textDistances_noStopWords, textDistances_test_noStopWords = pickle.load(f)
     print "Data loaded", ((time.time()-time1)/60)
    
-    
-rand = np.random.permutation(labels.index)
-train_1 = train_1[rand]
-train_2 = train_2[rand]
-labels = labels[rand]
+
 
 
 
