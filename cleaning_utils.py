@@ -151,7 +151,7 @@ def removeUniqueWords(qw, maxRepetition):
     
     qwdd = dd.from_pandas(qw, npartitions=16)
     print "dd creado"
-    aux = qwdd.question.apply(lambda x: [item for item in x if item not in unique_words], meta=('x', list)).compute()
+    aux = qwdd.question.apply(lambda x: [item for item in x if item not in unique_words]).compute()
     qw.question = aux
     
     return qw
@@ -167,7 +167,7 @@ def wordsToIndexes(qw):
     dask.set_options(get=dask.multiprocessing.get)
     qwi = qw.copy()
     qwidd = dd.from_pandas(qwi, npartitions=16)
-    aux = qwidd.question.apply(lambda x: le.transform(x), meta=('x', list)).compute()
+    aux = qwidd.question.apply(lambda x: le.transform(x)).compute()
     qwi.question = aux
     
     # le.inverse_transform(np.where(fm.iloc[[0]].as_matrix()[0] == 1))
@@ -220,11 +220,12 @@ def getTextFeaturesPairwiseDistributed(q1, q2):
 
     aux = dd.from_pandas(ddq, npartitions=16)
     
-    textFeatures.cos_sim = aux.apply(lambda x: cosine_similarity(text_to_vector(x.question1), text_to_vector(x.question2)), axis=1, meta=('x', list)).compute()
-    textFeatures.lev_dist = aux.apply(lambda x: Levenshtein.distance(x.question1, x.question2), axis=1, meta=('x', list))
-    textFeatures.jaro = aux.apply(lambda x: Levenshtein.jaro(x.question1, x.question2), axis=1, meta=('x', list))
-    textFeatures.jaro_winkler = aux.apply(lambda x: Levenshtein.jaro_winkler(x.question1, x.question2), axis=1, meta=('x', list))
-    textFeatures.ratio = aux.apply(lambda x: Levenshtein.ratio(x.question1, x.question2), axis=1, meta=('x', list))
+    # , meta=('x', list)
+    textFeatures.cos_sim = aux.apply(lambda x: cosine_similarity(text_to_vector(x.question1), text_to_vector(x.question2)), axis=1).compute()
+    textFeatures.lev_dist = aux.apply(lambda x: Levenshtein.distance(x.question1, x.question2), axis=1)
+    textFeatures.jaro = aux.apply(lambda x: Levenshtein.jaro(x.question1, x.question2), axis=1)
+    textFeatures.jaro_winkler = aux.apply(lambda x: Levenshtein.jaro_winkler(x.question1, x.question2), axis=1)
+    textFeatures.ratio = aux.apply(lambda x: Levenshtein.ratio(x.question1, x.question2), axis=1)
       
     return textFeatures
 
