@@ -1,4 +1,4 @@
-from keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, multiply, Merge, merge
+from keras.layers import Dense, Input, LSTM, Embedding, Conv1D, Dropout, Flatten, Activation, multiply, Merge, merge
 from keras.layers.merge import concatenate
 from keras.models import Model, Sequential
 from keras.layers.normalization import BatchNormalization
@@ -335,7 +335,81 @@ def model_v2_textDists(dist_length, MAX_SEQUENCE_LENGTH, nb_words, num_lstm_lp, 
     return saving_file, model
 
 
+def model_v3_textDists(dist_length, MAX_SEQUENCE_LENGTH, nb_words, EMBEDDING_LEN, num_lstm_lp, word_index=None, embeddings_file=4):
+    
+    saving_file = "model_v3_textDists*{val_loss:.4f}*_" + str(MAX_SEQUENCE_LENGTH) + "_" + str(dist_length) + "_" + str(nb_words) + "_" + \
+            str(EMBEDDING_LEN) + "_" + str(num_lstm_lp[0]) + "_" + str(num_lstm_lp[1])
+    
+    print saving_file
+    
+    imp1 = Input(shape=(MAX_SEQUENCE_LENGTH,), dtype='int32')
+    imp2 = Input(shape=(MAX_SEQUENCE_LENGTH,), dtype='int32')
+    imp3 = Input(shape=(dist_length,))
 
+    if word_index!=None and embeddings_file!=None:
+        if embeddings_file == 0:
+            embedding_layer = Embedding(nb_words, EMBEDDING_LEN, input_length=MAX_SEQUENCE_LENGTH)
+        elif embeddings_file == 1:     # embedding_len: 50, 100, 200, 300
+            embedding_layer = prepareEmbeddingLayer('glove.6B.' + str(EMBEDDING_LEN) + 'd.txt', 
+                                                    word_index, EMBEDDING_LEN, MAX_SEQUENCE_LENGTH)
+            saving_file += "_le1"
+        elif embeddings_file == 2:   # embedding_len: 25, 50, 100, 200, 
+            embedding_layer = prepareEmbeddingLayer('glove.twitter.27B.' + str(EMBEDDING_LEN) + 'd.txt', 
+                                                    word_index, EMBEDDING_LEN, MAX_SEQUENCE_LENGTH)
+            saving_file += "_le2"
+        elif embeddings_file ==3:
+            embedding_layer = prepareEmbeddingLayer('glove.42B.300d.txt', word_index, 300, MAX_SEQUENCE_LENGTH)
+            saving_file += "_le3"
+        elif embeddings_file ==4:
+            embedding_layer = prepareEmbeddingLayer('glove.840B.300d.txt', word_index, 300, MAX_SEQUENCE_LENGTH)
+            saving_file += "_le4"
+        else:
+            raise ValueError('Fichero de embeddings no valido')
+    else:
+        embedding_layer = Embedding(nb_words, EMBEDDING_LEN, input_length=MAX_SEQUENCE_LENGTH)
+        
+    saving_file += ".hdf5"
+    
+    lstm_layer = LSTM(num_lstm_lp[0])
+    conv_layer_1 = Conv1D(filters=64, kernel_size=3, activation='relu')
+    conv_layer_2 = Conv1D(filters=48, kernel_size=3, activation='relu')
+    
+    model1 = embedding_layer(imp1)
+    model2 = embedding_layer(imp2)
+    
+    model1 = conv_layer_1(model1)
+    model2 = conv_layer_1(model2)
+        
+    model1 = conv_layer_2(model1)
+    model2 = conv_layer_2(model2)
+            
+    model1 = Dropout(0.2)(model1)
+    model2 = Dropout(0.2)(model2)
+        
+#    model1 = Flatten()(model1)
+#    model2 = Flatten()(model2)
+        
+    model1 = lstm_layer(model1)
+    model2 = lstm_layer(model2) 
+    
+    
+    features = Dense(dist_length)(imp3)
+    
+    model = concatenate([model1, model2, features], axis=1)
+#    model = concatenate([model1, model2, imp3], axis=1)
+    model = BatchNormalization()(model)
+    
+    model = Dense(num_lstm_lp[1])(model)
+    model = BatchNormalization()(model)
+    model = Activation('relu')(model)
+    model = Dropout(0.2)(model)
+    model = Dense(1)(model)
+    model = BatchNormalization()(model)
+    model = Activation('sigmoid')(model)
+    
+    model = Model([imp1, imp2, imp3], model)
+    
+    return saving_file, model
 
 # https://blog.keras.io/using-pre-trained-word-embeddings-in-a-keras-model.html
 def prepareEmbeddingLayer(embeddings_file, word_index, embedding_len, max_sequence_len):
@@ -399,19 +473,3 @@ def prepareEmbeddingLayer_v2(embeddings_file, word_index, embedding_len, max_seq
     print "Embeddings cargados", ((time.time()-time1)/60), datetime.datetime.now().time().strftime("%H:%M:%S")
     
     return embedding_layer
-
-
-
-
-
-
-##Deriving the naive features
-#for i in (1, 2):
-#        transformed_sentences_train['question%s_tokens' % i] = train_sample['question%s' % i].apply(nltk.word_tokenize)
-#        transformed_sentences_train['question%s_lowercase_tokens' % i] = transformed_sentences_train['question%s_tokens' % i].apply(convert_tokens_lower)
-#        transformed_sentences_train['question%s_lowercase' % i] = transformed_sentences_train['question%s_lowercase_tokens' % i].apply(concatenate_tokens)
-#        transformed_sentences_train['question%s_words' % i] = transformed_sentences_train['question%s_tokens' % i].apply(remove_stopwords)
-#        transformed_sentences_train['question%s_pruned' % i] = transformed_sentences_train['question%s_words' % i].apply(concatenate_tokens)
-#naive_similarity['similarity'] = np.vectorize(find_similarity)(train_sample['question1'], train_sample['question2'])
-#naive_similarity['pruned_similarity'] = np.vectorize(find_similarity)(transformed_sentences_train['question1_pruned'], transformed_sentences_train['question2_pruned'])
-#temp_features['common_tokens'] = np.vectorize(return_common_tokens)(transformed_sentences_train['question1_tokens'], transformed_sentences_train['question2_tokens'])
